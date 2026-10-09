@@ -549,11 +549,16 @@ textarea:focus-visible,
 }
 
 .paper-history-list {
+  min-width: 0;
   display: grid;
   gap: 7px;
   margin: 14px 0 0;
   padding: 0;
   list-style: none;
+}
+
+.paper-history-list li {
+  min-width: 0;
 }
 
 .history-paper-button {
@@ -568,6 +573,7 @@ textarea:focus-visible,
   border-radius: 9px;
   background: transparent;
   text-align: left;
+  overflow: hidden;
   cursor: pointer;
   transition: color 150ms ease, border-color 150ms ease, background 150ms ease;
 }
@@ -578,6 +584,8 @@ textarea:focus-visible,
 }
 
 .history-paper-button span {
+  min-width: 0;
+  flex: 1;
   overflow: hidden;
   font-size: 11px;
   line-height: 1.4;
