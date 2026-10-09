@@ -5,6 +5,8 @@ import {
   ArrowUp,
   BookOpen,
   Check,
+  Copy,
+  Download,
   FileText,
   LoaderCircle,
   MessageCircle,
@@ -21,6 +23,12 @@ const API_URL = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000').replac
   '',
 );
 const API_TIMEOUT_MS = 70_000;
+const SUGGESTED_QUESTIONS = [
+  'What is the primary contribution?',
+  'Explain the methodology in simple terms.',
+  'What are the key findings?',
+  'What limitations are mentioned?',
+];
 
 function getErrorMessage(error, fallback) {
   const detail = error.response?.data?.detail;
@@ -30,6 +38,75 @@ function getErrorMessage(error, fallback) {
   }
   if (error.message) return error.message;
   return fallback;
+}
+
+function cleanCitationText(value) {
+  return value
+    .replace(/\*\*|__/g, '')
+    .replace(/[*_`]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function getCitationMetadata(summary) {
+  const titleSection = summary.match(
+    /^#{1,3}\s*Title\s*&\s*Authors\s+and\s+Abstract[^\n]*\n([\s\S]*?)(?=^#{1,3}\s|(?![\s\S]))/im,
+  )?.[1] || summary;
+  const plainTitleSection = titleSection.replace(/\*\*|__/g, '');
+  const extractField = (label) => {
+    const match = plainTitleSection.match(
+      new RegExp(`(?:^|\\n)\\s*(?:[-*]\\s*)?${label}\\s*:\\s*([^\\n]+)`, 'i'),
+    );
+    return match ? cleanCitationText(match[1]) : '';
+  };
+
+  const title = extractField('Title');
+  const authorText = extractField('Authors');
+  const authors = authorText
+    .replace(/\([^)]*\)/g, '')
+    .split(/\s*(?:,|;|\band\b|&)\s*/i)
+    .map((author) => author.trim())
+    .filter(Boolean);
+  const yearMatch = plainTitleSection.match(
+    /(?:^|\n)\s*(?:[-*]\s*)?(?:Publication\s+)?Year\s*:\s*((?:19|20)\d{2})\b/i,
+  );
+
+  return {
+    title,
+    authors,
+    year: yearMatch?.[1] || 'n.d.',
+  };
+}
+
+function formatApaAuthor(author) {
+  const names = author.split(/\s+/).filter(Boolean);
+  if (names.length < 2) return names[0] || '';
+
+  const surname = names.pop().replace(/,$/, '');
+  const initials = names
+    .map((name) => name.split('-').map((part) => `${part[0]?.toUpperCase() || ''}.`).join('-'))
+    .join(' ');
+  return `${surname}, ${initials}`;
+}
+
+function formatIeeeAuthor(author) {
+  const names = author.split(/\s+/).filter(Boolean);
+  if (names.length < 2) return names[0] || '';
+
+  const surname = names.pop().replace(/,$/, '');
+  const initials = names
+    .map((name) => name.split('-').map((part) => `${part[0]?.toUpperCase() || ''}.`).join('-'))
+    .join(' ');
+  return `${initials} ${surname}`;
+}
+
+function formatAuthorList(authors, formatAuthor, conjunction) {
+  const formattedAuthors = authors.map(formatAuthor);
+  if (formattedAuthors.length < 2) return formattedAuthors.join('');
+
+  const precedingAuthors = formattedAuthors.slice(0, -1).join(', ');
+  const lastAuthor = formattedAuthors[formattedAuthors.length - 1];
+  return `${precedingAuthors}${conjunction === '&' ? ', &' : ', and'} ${lastAuthor}`;
 }
 
 function App() {
@@ -43,12 +120,26 @@ function App() {
   const [sending, setSending] = useState(false);
   const [chatError, setChatError] = useState('');
   const [isDragging, setIsDragging] = useState(false);
+  const [copyStatus, setCopyStatus] = useState('');
+  const copyStatusTimerRef = useRef(null);
   const fileInputRef = useRef(null);
   const messagesEndRef = useRef(null);
+  const citationMetadata = getCitationMetadata(analysis);
+  const apaAuthors = citationMetadata.authors.length
+    ? `${formatAuthorList(citationMetadata.authors, formatApaAuthor, '&')} `
+    : '';
+  const apaCitation = citationMetadata.title
+    ? `${apaAuthors}(${citationMetadata.year}). ${citationMetadata.title}.`
+    : '';
+  const ieeeCitation = citationMetadata.title
+    ? `${citationMetadata.authors.length ? `${formatAuthorList(citationMetadata.authors, formatIeeeAuthor, 'and')}, ` : ''}“${citationMetadata.title},” ${citationMetadata.year === 'n.d.' ? '[n.d.]' : `${citationMetadata.year}.`}`
+    : '';
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, sending]);
+
+  useEffect(() => () => window.clearTimeout(copyStatusTimerRef.current), []);
 
   const selectFile = (selectedFile) => {
     if (!selectedFile || uploading) return;
@@ -61,6 +152,7 @@ function App() {
     setFile(selectedFile);
     setDocumentContext('');
     setAnalysis('');
+    setCopyStatus('');
     setMessages([]);
     setChatError('');
     setUploadError('');
@@ -80,6 +172,7 @@ function App() {
     setFile(null);
     setDocumentContext('');
     setAnalysis('');
+    setCopyStatus('');
     setMessages([]);
     setUploadError('');
     setChatError('');
@@ -112,6 +205,7 @@ function App() {
 
       setAnalysis(summary);
       setDocumentContext(context);
+      setCopyStatus('');
     } catch (error) {
       setUploadError(getErrorMessage(error, 'Unable to analyze this PDF.'));
     } finally {
@@ -119,9 +213,37 @@ function App() {
     }
   };
 
-  const handleAskQuestion = async (event) => {
-    event.preventDefault();
-    const nextQuestion = question.trim();
+  const handleDownloadSummary = () => {
+    if (!analysis) return;
+
+    const summaryFile = new Blob([analysis], {
+      type: 'text/markdown;charset=utf-8',
+    });
+    const downloadUrl = URL.createObjectURL(summaryFile);
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = 'research_summary.md';
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+  };
+
+  const copyText = async (text, label) => {
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error('Clipboard access is unavailable in this browser.');
+      }
+      await navigator.clipboard.writeText(text);
+      setCopyStatus('Copied!');
+    } catch (error) {
+      setCopyStatus(error.message || `Could not copy ${label}.`);
+    }
+
+    window.clearTimeout(copyStatusTimerRef.current);
+    copyStatusTimerRef.current = window.setTimeout(() => setCopyStatus(''), 2200);
+  };
+
+  const handleAskQuestion = async (questionText) => {
+    const nextQuestion = questionText.trim();
     if (!nextQuestion || !documentContext || sending) return;
 
     const nextMessages = [...messages, { role: 'user', content: nextQuestion }];
@@ -155,6 +277,11 @@ function App() {
     }
   };
 
+  const handleQuestionSubmit = (event) => {
+    event.preventDefault();
+    void handleAskQuestion(question);
+  };
+
   return (
     <div className="app-shell">
       <header className="app-header">
@@ -168,7 +295,7 @@ function App() {
       <main className="page-content" id="top">
         <section className="hero">
           <div className="eyebrow"><span /> YOUR RESEARCH, UNDERSTOOD</div>
-          <h1>Make every paper<br /><span>easier to understand.</span></h1>
+          <h1>Make Every Paper<br /><span>Easier To Understand.</span></h1>
           <p>Get a structured summary, then ask questions grounded in the paper.</p>
         </section>
 
@@ -254,13 +381,81 @@ function App() {
                 <span className="section-kicker">STEP 02</span>
                 <h2 id="summary-title">Structured summary</h2>
               </div>
-              {analysis && <span className="ready-badge"><Check size={13} /> Ready</span>}
+              {analysis && (
+                <div className="summary-header-actions">
+                  <button
+                    className="summary-action-button"
+                    type="button"
+                    onClick={() => void copyText(analysis, 'summary')}
+                  >
+                    <Copy size={14} /> Copy Summary
+                  </button>
+                  <button
+                    className="summary-action-button"
+                    type="button"
+                    onClick={handleDownloadSummary}
+                  >
+                    <Download size={14} /> Download (.md)
+                  </button>
+                  <span className="ready-badge"><Check size={13} /> Ready</span>
+                </div>
+              )}
             </div>
+            {analysis && copyStatus && (
+              <div className="copy-status" role="status" aria-live="polite">{copyStatus}</div>
+            )}
 
             {analysis ? (
-              <div className="markdown-body">
-                <ReactMarkdown>{analysis}</ReactMarkdown>
-              </div>
+              <>
+                <div className="markdown-body">
+                  <ReactMarkdown>{analysis}</ReactMarkdown>
+                </div>
+                <div className="citation-box">
+                  <div className="citation-heading">
+                    <div>
+                      <span className="section-kicker">REFERENCE</span>
+                      <h3>Quick citations</h3>
+                    </div>
+                  </div>
+                  {citationMetadata.title ? (
+                    <>
+                      <div className="citation-entry">
+                        <div className="citation-label">APA</div>
+                        <p>{apaAuthors}({citationMetadata.year}). <em>{citationMetadata.title}</em>.</p>
+                        <button
+                          className="citation-copy-button"
+                          type="button"
+                          onClick={() => void copyText(apaCitation, 'APA citation')}
+                          aria-label="Copy APA citation"
+                        >
+                          <Copy size={14} /> Copy
+                        </button>
+                      </div>
+                      <div className="citation-entry">
+                        <div className="citation-label">IEEE</div>
+                        <p>{ieeeCitation}</p>
+                        <button
+                          className="citation-copy-button"
+                          type="button"
+                          onClick={() => void copyText(ieeeCitation, 'IEEE citation')}
+                          aria-label="Copy IEEE citation"
+                        >
+                          <Copy size={14} /> Copy
+                        </button>
+                      </div>
+                      <p className="citation-note">
+                        {citationMetadata.year === 'n.d.'
+                          ? 'Publication year was not found in the generated summary.'
+                          : 'Check generated citation details against the original paper.'}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="citation-note">
+                      A title could not be identified in the summary, so citations could not be generated.
+                    </p>
+                  )}
+                </div>
+              </>
             ) : (
               <div className="empty-state">
                 <span className="empty-state-icon"><FileText size={23} /></span>
@@ -329,7 +524,23 @@ function App() {
               </div>
             )}
 
-            <form className="chat-form" onSubmit={handleAskQuestion}>
+            {analysis && (
+              <div className="suggested-questions" aria-label="Suggested questions">
+                {SUGGESTED_QUESTIONS.map((suggestedQuestion) => (
+                  <button
+                    className="question-chip"
+                    key={suggestedQuestion}
+                    type="button"
+                    onClick={() => void handleAskQuestion(suggestedQuestion)}
+                    disabled={!documentContext || sending}
+                  >
+                    {suggestedQuestion}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <form className="chat-form" onSubmit={handleQuestionSubmit}>
               <label className="sr-only" htmlFor="question-input">Ask a question about this paper</label>
               <textarea
                 id="question-input"

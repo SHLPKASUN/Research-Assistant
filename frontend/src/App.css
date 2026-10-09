@@ -126,11 +126,11 @@ textarea:focus-visible,
 .hero h1 {
   margin: 0;
   color: var(--ink);
-  font-family: Manrope, sans-serif;
+  font-family: Georgia, 'Times New Roman', serif;
   font-size: clamp(36px, 5vw, 52px);
-  font-weight: 800;
-  letter-spacing: -2.6px;
-  line-height: 1.13;
+  font-weight: 700;
+  letter-spacing: -1.8px;
+  line-height: 1.16;
 }
 
 .hero h1 span {
@@ -415,13 +415,129 @@ textarea:focus-visible,
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  margin-left: auto;
   padding: 5px 8px;
   color: var(--green);
   border-radius: 20px;
   background: #edf7f1;
   font-size: 10px;
   font-weight: 700;
+  white-space: nowrap;
+}
+
+.summary-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.summary-action-button {
+  min-height: 29px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 9px;
+  color: var(--green);
+  border: 1px solid #d6e7de;
+  border-radius: 8px;
+  background: #fbfdfc;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease;
+}
+
+.summary-action-button:hover {
+  border-color: #a8cbbb;
+  background: #f0f8f3;
+}
+
+.copy-status {
+  margin: -10px 0 12px;
+  color: var(--green);
+  font-size: 10px;
+  font-weight: 600;
+  text-align: right;
+}
+
+.citation-box {
+  margin-top: 24px;
+  padding: 16px;
+  border: 1px solid #e5ede8;
+  border-radius: 12px;
+  background: #f9fbfa;
+}
+
+.citation-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.citation-heading h3 {
+  margin: 0;
+  color: #314950;
+  font-family: Manrope, sans-serif;
+  font-size: 13px;
+}
+
+.citation-heading .section-kicker {
+  margin-bottom: 3px;
+}
+
+.citation-entry {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 9px;
+  padding: 10px 0;
+  border-top: 1px solid #e9efec;
+}
+
+.citation-label {
+  padding: 4px 6px;
+  color: var(--green);
+  border-radius: 5px;
+  background: #eaf5f0;
+  font-size: 9px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.citation-entry p {
+  min-width: 0;
+  margin: 1px 0 0;
+  color: #596b70;
+  font-size: 10px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.citation-copy-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 0 4px 4px;
+  color: #71827b;
+  border: 0;
+  background: transparent;
+  font-size: 9px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.citation-copy-button:hover {
+  color: var(--green);
+}
+
+.citation-note {
+  margin: 8px 0 0;
+  color: #89969a;
+  font-size: 9px;
+  line-height: 1.5;
 }
 
 .empty-state {
@@ -548,6 +664,37 @@ textarea:focus-visible,
 
 .chat-empty-state {
   min-height: 274px;
+}
+
+.suggested-questions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+
+.question-chip {
+  padding: 6px 9px;
+  color: #4e6a5f;
+  border: 1px solid #dfeae4;
+  border-radius: 20px;
+  background: #f8fbf9;
+  font-size: 9px;
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
+  transition: color 150ms ease, border-color 150ms ease, background 150ms ease;
+}
+
+.question-chip:hover:not(:disabled) {
+  color: var(--green-dark);
+  border-color: #aacbbb;
+  background: #edf7f1;
+}
+
+.question-chip:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .message-list {
@@ -810,7 +957,7 @@ textarea:focus-visible,
   }
 
   .hero h1 {
-    letter-spacing: -1.7px;
+    letter-spacing: -1.2px;
   }
 
   .hero > p {
@@ -824,6 +971,46 @@ textarea:focus-visible,
   .summary-panel,
   .chat-panel {
     padding: 19px 16px;
+  }
+
+  .summary-header-actions {
+    gap: 5px;
+  }
+
+  .summary-panel > .section-heading {
+    flex-wrap: wrap;
+  }
+
+  .summary-header-actions {
+    width: 100%;
+    margin-left: 52px;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .summary-action-button {
+    gap: 4px;
+    padding: 0 6px;
+    font-size: 9px;
+  }
+
+  .ready-badge {
+    padding: 5px 6px;
+    font-size: 9px;
+  }
+
+  .citation-box {
+    padding: 13px 11px;
+  }
+
+  .citation-entry {
+    grid-template-columns: 36px minmax(0, 1fr);
+    gap: 7px;
+  }
+
+  .citation-copy-button {
+    grid-column: 2;
+    justify-self: start;
   }
 
   .drop-zone-label {
