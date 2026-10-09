@@ -59,7 +59,7 @@ async def analyze_pdf(file: UploadFile = File(...)):
 
                 # Google API එකෙන් ඉල්ලන exact model එක
         response = client.models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-1.5-flash",
             contents=prompt
         )
 
