@@ -3,7 +3,6 @@ import axios from 'axios';
 import {
   AlertCircle,
   ArrowUp,
-  BookOpen,
   Check,
   Copy,
   Download,
@@ -285,11 +284,24 @@ function App() {
   return (
     <div className="app-shell">
       <header className="app-header">
-        <a className="brand" href="#top" aria-label="Research Assistant home">
-          <span className="brand-mark"><Sparkles size={20} /></span>
-          <span>Paper<span className="brand-accent">wise</span></span>
+        <a className="brand" href="#top" aria-label="කොළකෑලි AI home">
+          <span className="sinhala-brand">
+            <span className="sinhala-brand-text">කොළකෑලි</span>
+            <svg
+              className="sinhala-brand-underline"
+              viewBox="0 0 230 20"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path
+                d="M4 13 Q102 1 178 9 Q191 10 202 12 Q187 11 177 10 Q101 5 4 16 Q0 15 4 13Z"
+                fill="currentColor"
+              />
+            </svg>
+          </span>
+          <span className="ai-brand">AI</span>
         </a>
-        <span className="header-note">AI-powered paper insights</span>
+        <span className="header-note">Smarter Research Starts Here</span>
       </header>
 
       <main className="page-content" id="top">
@@ -303,7 +315,6 @@ function App() {
           <div className="section-heading">
             <div className="section-icon upload-icon"><Upload size={19} /></div>
             <div>
-              <span className="section-kicker">STEP 01</span>
               <h2 id="upload-title">Upload a research paper</h2>
             </div>
           </div>
@@ -376,9 +387,8 @@ function App() {
         <div className="workspace-grid">
           <section className="panel summary-panel" aria-labelledby="summary-title">
             <div className="section-heading">
-              <div className="section-icon summary-icon"><BookOpen size={19} /></div>
+              <div className="section-icon summary-icon"><FileText size={19} /></div>
               <div>
-                <span className="section-kicker">STEP 02</span>
                 <h2 id="summary-title">Structured summary</h2>
               </div>
               {analysis && (
@@ -469,7 +479,6 @@ function App() {
             <div className="section-heading">
               <div className="section-icon chat-icon"><MessageCircle size={19} /></div>
               <div>
-                <span className="section-kicker">STEP 03</span>
                 <h2 id="chat-title">Ask the paper</h2>
               </div>
             </div>
@@ -585,8 +594,39 @@ function App() {
           </section>
         </div>
 
+        <section className="feature-overview" aria-labelledby="features-title">
+          <h2 id="features-title">
+            <span className="feature-script feature-script-muted">Explore Our</span>{' '}
+            <span className="feature-script">Features</span>
+          </h2>
+          <div className="feature-grid">
+            <article className="feature-card">
+              <span className="feature-icon" aria-hidden="true">⚡</span>
+              <h3>Instant Analysis</h3>
+              <p>Upload any academic PDF and extract key insights in seconds.</p>
+            </article>
+            <article className="feature-card">
+              <span className="feature-icon" aria-hidden="true">📊</span>
+              <h3>Structured 5-Part Summary</h3>
+              <p>Get clear breakdowns of Objectives, Methods, Findings, Limitations &amp; Conclusion.</p>
+            </article>
+            <article className="feature-card">
+              <span className="feature-icon" aria-hidden="true">💬</span>
+              <h3>Grounded AI Chat</h3>
+              <p>Ask questions directly to the document without hallucinated answers.</p>
+            </article>
+            <article className="feature-card">
+              <span className="feature-icon" aria-hidden="true">📑</span>
+              <h3>Citations &amp; Export</h3>
+              <p>Instantly copy APA/IEEE citations and download summary as Markdown.</p>
+            </article>
+          </div>
+        </section>
+
         <footer className="page-footer">
-          <Sparkles size={14} /> Built to help you focus on the ideas that matter.
+          <span>කොළකෑලි AI</span>
+          <span aria-hidden="true">•</span>
+          <span>Built with FastAPI, React &amp; Gemini API</span>
         </footer>
       </main>
     </div>
