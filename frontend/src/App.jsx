@@ -908,6 +908,9 @@ function App() {
                 <h2 id="summary-title">Structured summary</h2>
               </div>
               {analysis && (
+                <span className="ready-badge"><Check size={13} /> Ready</span>
+              )}
+              {analysis && (
                 <div className="summary-header-actions">
                   <button
                     className="summary-action-button"
@@ -937,7 +940,6 @@ function App() {
                   >
                     <Printer size={14} /> Print / Save PDF
                   </button>
-                  <span className="ready-badge"><Check size={13} /> Ready</span>
                 </div>
               )}
             </div>
@@ -1065,77 +1067,79 @@ function App() {
               )}
             </div>
 
-            {chatError && (
-              <div className="error-banner chat-error" role="alert">
-                <AlertCircle size={17} />
-                <span>{chatError}</span>
-                <button type="button" onClick={() => setChatError('')} aria-label="Dismiss error">
-                  <X size={16} />
-                </button>
-              </div>
-            )}
-
-            {analysis && (
-              <div className="suggested-questions" aria-label="Suggested questions">
-                <p className="quick-prompt-label">Try asking</p>
-                {SUGGESTED_QUESTIONS.map((suggestedQuestion) => (
-                  <button
-                    className="question-chip quick-prompt-chip"
-                    key={suggestedQuestion}
-                    type="button"
-                    onClick={() => setQuestion(suggestedQuestion)}
-                    disabled={!documentContext || sending}
-                  >
-                    {suggestedQuestion}
+            <div className="chat-composer">
+              {chatError && (
+                <div className="error-banner chat-error" role="alert">
+                  <AlertCircle size={17} />
+                  <span>{chatError}</span>
+                  <button type="button" onClick={() => setChatError('')} aria-label="Dismiss error">
+                    <X size={16} />
                   </button>
-                ))}
-              </div>
-            )}
-
-            <form className="chat-form" onSubmit={handleQuestionSubmit}>
-              <label className="sr-only" htmlFor="question-input">Ask a question about this paper</label>
-              <textarea
-                id="question-input"
-                value={question}
-                onChange={(event) => setQuestion(event.target.value)}
-                placeholder={documentContext ? 'Ask a question about this paper...' : 'Upload a paper to start asking questions'}
-                rows={2}
-                maxLength={4000}
-                disabled={!documentContext || sending}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' && !event.shiftKey) {
-                    event.preventDefault();
-                    event.currentTarget.form.requestSubmit();
-                  }
-                }}
-              />
-              <button
-                className="send-button"
-                type="submit"
-                aria-label="Send question"
-                disabled={!documentContext || !question.trim() || sending}
-              >
-                {sending ? <LoaderCircle className="spinner" size={18} /> : <ArrowUp size={19} />}
-              </button>
-            </form>
-            <div className="chat-footer">
-              <span>{documentContext ? 'Answers are based on the uploaded paper' : 'Analyze a PDF to enable the assistant'}</span>
-              {messages.length > 0 && (
-                <button
-                  className="text-button clear-chat-button"
-                  type="button"
-                  onClick={() => {
-                    setMessages([]);
-                    updatePaperHistory((currentPapers) => currentPapers.map((paper) => (
-                      paper.id === activePaperId ? { ...paper, messages: [] } : paper
-                    )));
-                    setChatError('');
-                  }}
-                  disabled={sending}
-                >
-                  <RotateCcw size={14} /> Clear chat
-                </button>
+                </div>
               )}
+
+              {analysis && (
+                <div className="suggested-questions" aria-label="Suggested questions">
+                  <p className="quick-prompt-label">Try asking</p>
+                  {SUGGESTED_QUESTIONS.map((suggestedQuestion) => (
+                    <button
+                      className="question-chip quick-prompt-chip"
+                      key={suggestedQuestion}
+                      type="button"
+                      onClick={() => setQuestion(suggestedQuestion)}
+                      disabled={!documentContext || sending}
+                    >
+                      {suggestedQuestion}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <form className="chat-form" onSubmit={handleQuestionSubmit}>
+                <label className="sr-only" htmlFor="question-input">Ask a question about this paper</label>
+                <textarea
+                  id="question-input"
+                  value={question}
+                  onChange={(event) => setQuestion(event.target.value)}
+                  placeholder={documentContext ? 'Ask a question about this paper...' : 'Upload a paper to start asking questions'}
+                  rows={2}
+                  maxLength={4000}
+                  disabled={!documentContext || sending}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && !event.shiftKey) {
+                      event.preventDefault();
+                      event.currentTarget.form.requestSubmit();
+                    }
+                  }}
+                />
+                <button
+                  className="send-button"
+                  type="submit"
+                  aria-label="Send question"
+                  disabled={!documentContext || !question.trim() || sending}
+                >
+                  {sending ? <LoaderCircle className="spinner" size={18} /> : <ArrowUp size={19} />}
+                </button>
+              </form>
+              <div className="chat-footer">
+                <span>{documentContext ? 'Answers are based on the uploaded paper' : 'Analyze a PDF to enable the assistant'}</span>
+                {messages.length > 0 && (
+                  <button
+                    className="text-button clear-chat-button"
+                    type="button"
+                    onClick={() => {
+                      setMessages([]);
+                      updatePaperHistory((currentPapers) => currentPapers.map((paper) => (
+                        paper.id === activePaperId ? { ...paper, messages: [] } : paper
+                      )));
+                      setChatError('');
+                    }}
+                    disabled={sending}
+                  >
+                    <RotateCcw size={14} /> Clear chat
+                  </button>
+                )}
+              </div>
             </div>
           </m.section>
           </m.div>
