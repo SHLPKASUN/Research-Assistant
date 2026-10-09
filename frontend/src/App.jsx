@@ -6,9 +6,13 @@ import {
   Check,
   Copy,
   Download,
+  FileDown,
   FileText,
+  History,
+  Lightbulb,
   LoaderCircle,
   MessageCircle,
+  Printer,
   RotateCcw,
   Sparkles,
   Upload,
@@ -22,12 +26,50 @@ const API_URL = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000').replac
   '',
 );
 const API_TIMEOUT_MS = 70_000;
+const PAPER_HISTORY_KEY = 'research-assistant-paper-history';
+const MAX_HISTORY_ITEMS = 5;
 const SUGGESTED_QUESTIONS = [
   'What is the primary contribution?',
   'Explain the methodology in simple terms.',
   'What are the key findings?',
   'What limitations are mentioned?',
 ];
+
+function loadPaperHistory() {
+  try {
+    const savedHistory = JSON.parse(localStorage.getItem(PAPER_HISTORY_KEY) || '[]');
+    if (!Array.isArray(savedHistory)) {
+      throw new Error('Saved paper history has an invalid format.');
+    }
+
+    return {
+      papers: savedHistory
+        .filter((paper) => (
+          paper
+          && typeof paper.id === 'string'
+          && typeof paper.title === 'string'
+          && typeof paper.filename === 'string'
+          && typeof paper.analysis === 'string'
+          && typeof paper.documentContext === 'string'
+          && Array.isArray(paper.messages)
+        ))
+        .map((paper) => ({
+          ...paper,
+          unverifiedClaims: Array.isArray(paper.unverifiedClaims)
+            ? paper.unverifiedClaims.filter((claim) => typeof claim === 'string')
+            : null,
+        }))
+        .slice(0, MAX_HISTORY_ITEMS),
+      error: '',
+    };
+  } catch (error) {
+    console.error('Could not load saved paper history.', error);
+    return {
+      papers: [],
+      error: 'Saved paper history could not be loaded from this browser.',
+    };
+  }
+}
 
 function getErrorMessage(error, fallback) {
   const detail = error.response?.data?.detail;
@@ -108,10 +150,123 @@ function formatAuthorList(authors, formatAuthor, conjunction) {
   return `${precedingAuthors}${conjunction === '&' ? ', &' : ', and'} ${lastAuthor}`;
 }
 
+function escapeHtml(value) {
+  return value.replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  })[character]);
+}
+
+function renderMarkdownInline(text) {
+  return escapeHtml(text)
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*(.+?)\*\*|__(.+?)__/g, '<strong>$1$2</strong>')
+    .replace(/\*(.+?)\*|_(.+?)_/g, '<em>$1$2</em>');
+}
+
+function renderMarkdownToHtml(markdown) {
+  const output = [];
+  let paragraph = [];
+  let listType = '';
+
+  const closeParagraph = () => {
+    if (paragraph.length) {
+      output.push(`<p>${paragraph.map(renderMarkdownInline).join(' ')}</p>`);
+      paragraph = [];
+    }
+  };
+  const closeList = () => {
+    if (listType) {
+      output.push(`</${listType}>`);
+      listType = '';
+    }
+  };
+
+  markdown.split(/\r?\n/).forEach((line) => {
+    const heading = line.match(/^(#{1,3})\s+(.+)$/);
+    const unorderedItem = line.match(/^\s*[-*]\s+(.+)$/);
+    const orderedItem = line.match(/^\s*\d+[.)]\s+(.+)$/);
+
+    if (!line.trim()) {
+      closeParagraph();
+      closeList();
+    } else if (heading) {
+      closeParagraph();
+      closeList();
+      const level = heading[1].length;
+      output.push(`<h${level}>${renderMarkdownInline(heading[2])}</h${level}>`);
+    } else if (unorderedItem || orderedItem) {
+      closeParagraph();
+      const nextListType = unorderedItem ? 'ul' : 'ol';
+      if (listType !== nextListType) {
+        closeList();
+        output.push(`<${nextListType}>`);
+        listType = nextListType;
+      }
+      output.push(`<li>${renderMarkdownInline((unorderedItem || orderedItem)[1])}</li>`);
+    } else {
+      closeList();
+      paragraph.push(line.trim());
+    }
+  });
+
+  closeParagraph();
+  closeList();
+  return output.join('\n');
+}
+
+function createExportHtml(summary, title, apaCitation, ieeeCitation) {
+  const citations = [apaCitation, ieeeCitation]
+    .filter(Boolean)
+    .map((citation) => `<li>${escapeHtml(citation)}</li>`)
+    .join('\n');
+  const citationSection = citations
+    ? `<section class="references"><h2>References</h2><ul>${citations}</ul></section>`
+    : '';
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${escapeHtml(title)}</title>
+  <style>
+    :root { color-scheme: light; font-family: Arial, sans-serif; color: #172033; }
+    body { max-width: 820px; margin: 48px auto; padding: 0 28px; line-height: 1.7; }
+    h1, h2, h3 { color: #172033; line-height: 1.3; }
+    h1 { padding-bottom: 12px; border-bottom: 3px solid #00ff00; }
+    h2 { margin-top: 30px; padding-bottom: 6px; border-bottom: 1px solid #d8e0e8; }
+    li { margin: 6px 0; }
+    code { padding: 2px 5px; background: #f0f3f6; border-radius: 4px; }
+    .references { margin-top: 42px; }
+    @media print {
+      body { max-width: none; margin: 0; padding: 0; }
+      h1, h2, h3 { break-after: avoid; }
+      p, li { orphans: 3; widows: 3; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>${escapeHtml(title)}</h1>
+    ${renderMarkdownToHtml(summary)}
+    ${citationSection}
+  </main>
+</body>
+</html>`;
+}
+
 function App() {
+  const [historyState, setHistoryState] = useState(loadPaperHistory);
+  const { papers, error: historyError } = historyState;
   const [file, setFile] = useState(null);
   const [documentContext, setDocumentContext] = useState('');
   const [analysis, setAnalysis] = useState('');
+  const [unverifiedClaims, setUnverifiedClaims] = useState(null);
+  const [activePaperId, setActivePaperId] = useState('');
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [question, setQuestion] = useState('');
@@ -120,10 +275,15 @@ function App() {
   const [chatError, setChatError] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const [copyStatus, setCopyStatus] = useState('');
+  const [exportError, setExportError] = useState('');
   const copyStatusTimerRef = useRef(null);
   const fileInputRef = useRef(null);
   const messagesEndRef = useRef(null);
   const citationMetadata = getCitationMetadata(analysis);
+  const currentPaperTitle = citationMetadata.title
+    || file?.name.replace(/\.pdf$/i, '')
+    || papers.find((paper) => paper.id === activePaperId)?.title
+    || 'Research paper summary';
   const apaAuthors = citationMetadata.authors.length
     ? `${formatAuthorList(citationMetadata.authors, formatApaAuthor, '&')} `
     : '';
@@ -133,6 +293,18 @@ function App() {
   const ieeeCitation = citationMetadata.title
     ? `${citationMetadata.authors.length ? `${formatAuthorList(citationMetadata.authors, formatIeeeAuthor, 'and')}, ` : ''}“${citationMetadata.title},” ${citationMetadata.year === 'n.d.' ? '[n.d.]' : `${citationMetadata.year}.`}`
     : '';
+
+  const updatePaperHistory = (updatePapers) => {
+    const nextPapers = updatePapers(papers);
+    let errorMessage = '';
+    try {
+      localStorage.setItem(PAPER_HISTORY_KEY, JSON.stringify(nextPapers));
+    } catch (error) {
+      console.error('Could not save paper history.', error);
+      errorMessage = 'Paper history could not be saved. Check this browser’s local storage space.';
+    }
+    setHistoryState({ papers: nextPapers, error: errorMessage });
+  };
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -149,12 +321,15 @@ function App() {
     }
 
     setFile(selectedFile);
+    setActivePaperId('');
     setDocumentContext('');
     setAnalysis('');
+    setUnverifiedClaims(null);
     setCopyStatus('');
     setMessages([]);
     setChatError('');
     setUploadError('');
+    setExportError('');
   };
 
   const handleFileChange = (event) => {
@@ -169,12 +344,15 @@ function App() {
 
   const clearFile = () => {
     setFile(null);
+    setActivePaperId('');
     setDocumentContext('');
     setAnalysis('');
+    setUnverifiedClaims(null);
     setCopyStatus('');
     setMessages([]);
     setUploadError('');
     setChatError('');
+    setExportError('');
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -183,8 +361,10 @@ function App() {
     if (!file || uploading) return;
 
     setUploading(true);
+    setActivePaperId('');
     setUploadError('');
     setAnalysis('');
+    setUnverifiedClaims(null);
     setDocumentContext('');
     setMessages([]);
     setChatError('');
@@ -196,15 +376,41 @@ function App() {
       const response = await axios.post(`${API_URL}/analyze-pdf`, formData, {
         timeout: API_TIMEOUT_MS,
       });
-      const { analysis: summary, document_context: context } = response.data;
+      const {
+        summary,
+        analysis: legacySummary,
+        unverified_claims: claims,
+        document_context: context,
+      } = response.data;
+      const paperSummary = summary || legacySummary;
 
-      if (!summary || !context) {
+      if (!paperSummary || !context || !Array.isArray(claims)
+        || claims.some((claim) => typeof claim !== 'string')) {
         throw new Error('The server returned an incomplete analysis. Please try again.');
       }
 
-      setAnalysis(summary);
+      setAnalysis(paperSummary);
+      setUnverifiedClaims(claims);
       setDocumentContext(context);
+      const paperId = window.crypto?.randomUUID?.()
+        || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const paperTitle = getCitationMetadata(paperSummary).title
+        || file.name.replace(/\.pdf$/i, '');
+      setActivePaperId(paperId);
+      updatePaperHistory((currentPapers) => [
+          {
+            id: paperId,
+            title: paperTitle,
+            filename: file.name,
+            analysis: paperSummary,
+            documentContext: context,
+            unverifiedClaims: claims,
+            messages: [],
+          },
+          ...currentPapers.filter((paper) => paper.id !== paperId),
+        ].slice(0, MAX_HISTORY_ITEMS));
       setCopyStatus('');
+      setExportError('');
     } catch (error) {
       setUploadError(getErrorMessage(error, 'Unable to analyze this PDF.'));
     } finally {
@@ -215,15 +421,64 @@ function App() {
   const handleDownloadSummary = () => {
     if (!analysis) return;
 
-    const summaryFile = new Blob([analysis], {
-      type: 'text/markdown;charset=utf-8',
-    });
-    const downloadUrl = URL.createObjectURL(summaryFile);
+    const summaryFile = new Blob([analysis], { type: 'text/markdown;charset=utf-8' });
+    downloadBlob(summaryFile, 'research_summary.md');
+  };
+
+  const downloadBlob = (blob, filename) => {
+    const downloadUrl = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = downloadUrl;
-    link.download = 'research_summary.md';
+    link.download = filename;
     link.click();
     window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+  };
+
+  const handleDownloadHtml = () => {
+    if (!analysis) return;
+
+    const htmlFile = new Blob(
+      [createExportHtml(analysis, currentPaperTitle, apaCitation, ieeeCitation)],
+      { type: 'text/html;charset=utf-8' },
+    );
+    downloadBlob(htmlFile, 'research_summary.html');
+    setExportError('');
+  };
+
+  const handlePrintSummary = () => {
+    if (!analysis) return;
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      setExportError('Allow pop-ups for this site to print or save the summary as a PDF.');
+      return;
+    }
+
+    printWindow.document.open();
+    printWindow.document.write(
+      createExportHtml(analysis, currentPaperTitle, apaCitation, ieeeCitation),
+    );
+    printWindow.document.close();
+    printWindow.focus();
+    window.setTimeout(() => printWindow.print(), 250);
+    setExportError('');
+  };
+
+  const handleSelectHistory = (paper) => {
+    if (uploading || sending) return;
+
+    setActivePaperId(paper.id);
+    setFile(null);
+    setAnalysis(paper.analysis);
+    setUnverifiedClaims(paper.unverifiedClaims);
+    setDocumentContext(paper.documentContext);
+    setMessages(paper.messages);
+    setQuestion('');
+    setUploadError('');
+    setChatError('');
+    setCopyStatus('');
+    setExportError('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const copyText = async (text, label) => {
@@ -247,6 +502,9 @@ function App() {
 
     const nextMessages = [...messages, { role: 'user', content: nextQuestion }];
     setMessages(nextMessages);
+    updatePaperHistory((currentPapers) => currentPapers.map((paper) => (
+      paper.id === activePaperId ? { ...paper, messages: nextMessages } : paper
+    )));
     setQuestion('');
     setSending(true);
     setChatError('');
@@ -263,12 +521,20 @@ function App() {
         throw new Error('The server returned an empty answer. Please try again.');
       }
 
-      setMessages((current) => [
-        ...current,
+      const completedMessages = [
+        ...nextMessages,
         { role: 'assistant', content: response.data.answer },
-      ]);
+      ];
+      setMessages(completedMessages);
+      updatePaperHistory((currentPapers) => currentPapers.map((paper) => (
+        paper.id === activePaperId ? { ...paper, messages: completedMessages } : paper
+      )));
     } catch (error) {
-      setMessages((current) => current.slice(0, -1));
+      const restoredMessages = nextMessages.slice(0, -1);
+      setMessages(restoredMessages);
+      updatePaperHistory((currentPapers) => currentPapers.map((paper) => (
+        paper.id === activePaperId ? { ...paper, messages: restoredMessages } : paper
+      )));
       setQuestion(nextQuestion);
       setChatError(getErrorMessage(error, 'Unable to answer that question.'));
     } finally {
@@ -384,7 +650,69 @@ function App() {
           )}
         </section>
 
-        <div className="workspace-grid">
+        <div className="research-workspace">
+          <aside className="paper-sidebar" aria-label="Paper history and research gaps">
+            <section className="paper-history panel" aria-labelledby="paper-history-title">
+              <div className="history-heading">
+                <div className="history-title">
+                  <History size={17} aria-hidden="true" />
+                  <h2 id="paper-history-title">Paper history</h2>
+                </div>
+                <span className="history-count">{papers.length}/{MAX_HISTORY_ITEMS}</span>
+              </div>
+              <p className="history-caption">Saved on this device</p>
+              {historyError && (
+                <p className="history-error" role="alert">{historyError}</p>
+              )}
+              {papers.length ? (
+                <ul className="paper-history-list">
+                  {papers.map((paper) => (
+                    <li key={paper.id}>
+                      <button
+                        className={`history-paper-button${paper.id === activePaperId ? ' is-active' : ''}`}
+                        type="button"
+                        onClick={() => handleSelectHistory(paper)}
+                        disabled={uploading || sending}
+                        aria-current={paper.id === activePaperId ? 'true' : undefined}
+                        title={paper.title}
+                      >
+                        <FileText size={16} aria-hidden="true" />
+                        <span>{paper.title}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="history-empty">Your summarized papers will appear here.</p>
+              )}
+            </section>
+
+            <section className="unverified-card panel" aria-labelledby="unverified-title">
+              <div className="unverified-heading">
+                <span className="unverified-icon" aria-hidden="true">
+                  <Lightbulb size={17} />
+                </span>
+                <h2 id="unverified-title">Unverified Claims &amp; Gaps</h2>
+              </div>
+              {!analysis ? (
+                <p className="unverified-placeholder">
+                  Upload a paper to reveal research gaps.
+                </p>
+              ) : unverifiedClaims === null ? (
+                <p className="unverified-placeholder">
+                  Research gaps were not captured for this saved paper.
+                </p>
+              ) : (
+                <ul className="unverified-list">
+                  {unverifiedClaims.map((claim, index) => (
+                    <li key={`${index}-${claim}`}>{claim}</li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          </aside>
+
+          <div className="workspace-grid">
           <section className="panel summary-panel" aria-labelledby="summary-title">
             <div className="section-heading">
               <div className="section-icon summary-icon"><FileText size={19} /></div>
@@ -407,10 +735,30 @@ function App() {
                   >
                     <Download size={14} /> Download (.md)
                   </button>
+                  <button
+                    className="summary-action-button"
+                    type="button"
+                    onClick={handleDownloadHtml}
+                  >
+                    <FileDown size={14} /> Download (.html)
+                  </button>
+                  <button
+                    className="summary-action-button"
+                    type="button"
+                    onClick={handlePrintSummary}
+                  >
+                    <Printer size={14} /> Print / Save PDF
+                  </button>
                   <span className="ready-badge"><Check size={13} /> Ready</span>
                 </div>
               )}
             </div>
+            {exportError && (
+              <div className="error-banner export-error" role="alert">
+                <AlertCircle size={17} />
+                <span>{exportError}</span>
+              </div>
+            )}
             {analysis && copyStatus && (
               <div className="copy-status" role="status" aria-live="polite">{copyStatus}</div>
             )}
@@ -583,6 +931,9 @@ function App() {
                   type="button"
                   onClick={() => {
                     setMessages([]);
+                    updatePaperHistory((currentPapers) => currentPapers.map((paper) => (
+                      paper.id === activePaperId ? { ...paper, messages: [] } : paper
+                    )));
                     setChatError('');
                   }}
                   disabled={sending}
@@ -592,6 +943,7 @@ function App() {
               )}
             </div>
           </section>
+          </div>
         </div>
 
         <section className="feature-overview" aria-labelledby="features-title">
@@ -599,28 +951,58 @@ function App() {
             <span className="feature-script feature-script-muted">Explore Our</span>{' '}
             <span className="feature-script">Features</span>
           </h2>
-          <div className="feature-grid">
-            <article className="feature-card">
-              <span className="feature-icon" aria-hidden="true">⚡</span>
-              <h3>Instant Analysis</h3>
-              <p>Upload any academic PDF and extract key insights in seconds.</p>
-            </article>
-            <article className="feature-card">
-              <span className="feature-icon" aria-hidden="true">📊</span>
-              <h3>Structured 5-Part Summary</h3>
-              <p>Get clear breakdowns of Objectives, Methods, Findings, Limitations &amp; Conclusion.</p>
-            </article>
-            <article className="feature-card">
-              <span className="feature-icon" aria-hidden="true">💬</span>
-              <h3>Grounded AI Chat</h3>
-              <p>Ask questions directly to the document without hallucinated answers.</p>
-            </article>
-            <article className="feature-card">
-              <span className="feature-icon" aria-hidden="true">📑</span>
-              <h3>Citations &amp; Export</h3>
-              <p>Instantly copy APA/IEEE citations and download summary as Markdown.</p>
-            </article>
-          </div>
+          <section className="feature-group" aria-labelledby="core-features-title">
+            <div className="feature-group-heading">
+              <h3 id="core-features-title">Core Features</h3>
+              <p>The main tools for understanding a research paper.</p>
+            </div>
+            <div className="feature-grid core-feature-grid">
+              <article className="feature-card">
+                <span className="feature-icon" aria-hidden="true">⚡</span>
+                <h4>PDF Analysis</h4>
+                <p>Upload one academic PDF and extract its research content for analysis.</p>
+              </article>
+              <article className="feature-card">
+                <span className="feature-icon" aria-hidden="true">📊</span>
+                <h4>Structured Summary</h4>
+                <p>Get a readable five-part summary: title and authors, problem, methodology, results, and conclusion.</p>
+              </article>
+              <article className="feature-card">
+                <span className="feature-icon" aria-hidden="true">💬</span>
+                <h4>Paper-Grounded Chat</h4>
+                <p>Ask natural-language questions and get answers grounded in the uploaded paper.</p>
+              </article>
+            </div>
+          </section>
+
+          <section className="feature-group extra-feature-group" aria-labelledby="extra-features-title">
+            <div className="feature-group-heading">
+              <h3 id="extra-features-title">Extra Features</h3>
+              <p>Helpful tools for revisiting, sharing, and using your results.</p>
+            </div>
+            <div className="feature-grid extra-feature-grid">
+              <article className="feature-card">
+                <span className="feature-icon" aria-hidden="true">🕘</span>
+                <h4>Paper History</h4>
+                <p>Keep up to five recent summaries on this browser and switch back to them later.</p>
+              </article>
+              <article className="feature-card">
+                <span className="feature-icon" aria-hidden="true">📑</span>
+                <h4>Citations &amp; Export</h4>
+                <p>Copy APA/IEEE citations or export summaries as Markdown, HTML, or print-ready PDF.</p>
+              </article>
+              <article className="feature-card">
+                <span className="feature-icon" aria-hidden="true">✨</span>
+                <h4>Chat Shortcuts</h4>
+                <p>Start with suggested questions or clear the conversation when you want a fresh start.</p>
+              </article>
+              <article className="feature-card">
+                <span className="feature-icon" aria-hidden="true">🔎</span>
+                <h4>Research Gaps &amp; Claims</h4>
+                <p>See tentative claims and open research questions identified in the paper.</p>
+              </article>
+            </div>
+          </section>
         </section>
 
         <footer className="page-footer">
