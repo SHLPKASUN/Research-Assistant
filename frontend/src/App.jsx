@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
+import { LazyMotion, domAnimation, m } from 'framer-motion';
 import {
   AlertCircle,
   ArrowUp,
   Check,
+  CircleHelp,
   Copy,
   Download,
   FileDown,
@@ -29,11 +31,57 @@ const API_TIMEOUT_MS = 70_000;
 const PAPER_HISTORY_KEY = 'research-assistant-paper-history';
 const MAX_HISTORY_ITEMS = 5;
 const SUGGESTED_QUESTIONS = [
-  'What is the primary contribution?',
-  'Explain the methodology in simple terms.',
-  'What are the key findings?',
-  'What limitations are mentioned?',
+  'Explain the methodology',
+  'What are the main limitations?',
+  'What are practical applications?',
 ];
+
+const workspaceVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: { staggerChildren: 0.12 },
+  },
+};
+const workspaceGroupVariants = {
+  hidden: {},
+  visible: {
+    transition: { staggerChildren: 0.1 },
+  },
+};
+const workspaceCardVariants = {
+  hidden: { opacity: 0, y: 24 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.5, ease: 'easeOut' },
+  },
+};
+const featureCardMotionProps = {
+  initial: { opacity: 0, y: 40 },
+  whileInView: { opacity: 1, y: 0 },
+  viewport: { once: true },
+  transition: { duration: 0.5, ease: 'easeOut' },
+};
+
+function LoadingSkeleton({ variant }) {
+  return (
+    <div className={`loading-skeleton loading-skeleton-${variant}`} role="status">
+      <span className="sr-only">Analyzing paper, please wait.</span>
+      <div className="skeleton-block" />
+      <div className="skeleton-line skeleton-line-long" />
+      <div className="skeleton-line skeleton-line-medium" />
+      <div className="skeleton-line skeleton-line-short" />
+      {variant === 'summary' && (
+        <>
+          <div className="skeleton-block skeleton-block-secondary" />
+          <div className="skeleton-line skeleton-line-long" />
+          <div className="skeleton-line skeleton-line-medium" />
+        </>
+      )}
+    </div>
+  );
+}
 
 function loadPaperHistory() {
   try {
@@ -268,6 +316,8 @@ function App() {
   const [unverifiedClaims, setUnverifiedClaims] = useState(null);
   const [activePaperId, setActivePaperId] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [uploadStep, setUploadStep] = useState(-1);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadError, setUploadError] = useState('');
   const [question, setQuestion] = useState('');
   const [messages, setMessages] = useState([]);
@@ -279,6 +329,7 @@ function App() {
   const copyStatusTimerRef = useRef(null);
   const fileInputRef = useRef(null);
   const messagesEndRef = useRef(null);
+  const progressTimerRef = useRef(null);
   const citationMetadata = getCitationMetadata(analysis);
   const currentPaperTitle = citationMetadata.title
     || file?.name.replace(/\.pdf$/i, '')
@@ -312,6 +363,27 @@ function App() {
 
   useEffect(() => () => window.clearTimeout(copyStatusTimerRef.current), []);
 
+  useEffect(() => {
+    if (!uploading || uploadStep !== 1) return undefined;
+
+    const timer = window.setTimeout(() => {
+      setUploadStep(2);
+      setUploadProgress(65);
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [uploading, uploadStep]);
+
+  useEffect(() => {
+    if (!uploading || uploadStep !== 2) return undefined;
+
+    const timer = window.setInterval(() => {
+      setUploadProgress((current) => Math.min(94, current + 1));
+    }, 350);
+    return () => window.clearInterval(timer);
+  }, [uploading, uploadStep]);
+
+  useEffect(() => () => window.clearTimeout(progressTimerRef.current), []);
+
   const selectFile = (selectedFile) => {
     if (!selectedFile || uploading) return;
 
@@ -330,6 +402,8 @@ function App() {
     setChatError('');
     setUploadError('');
     setExportError('');
+    setUploadStep(-1);
+    setUploadProgress(0);
   };
 
   const handleFileChange = (event) => {
@@ -353,6 +427,8 @@ function App() {
     setUploadError('');
     setChatError('');
     setExportError('');
+    setUploadStep(-1);
+    setUploadProgress(0);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -361,6 +437,9 @@ function App() {
     if (!file || uploading) return;
 
     setUploading(true);
+    window.clearTimeout(progressTimerRef.current);
+    setUploadStep(0);
+    setUploadProgress(4);
     setActivePaperId('');
     setUploadError('');
     setAnalysis('');
@@ -375,6 +454,12 @@ function App() {
     try {
       const response = await axios.post(`${API_URL}/analyze-pdf`, formData, {
         timeout: API_TIMEOUT_MS,
+        onUploadProgress: (progressEvent) => {
+          if (!progressEvent.total) return;
+          const ratio = Math.min(1, progressEvent.loaded / progressEvent.total);
+          setUploadProgress(4 + Math.round(ratio * 34));
+          if (ratio === 1) setUploadStep((current) => (current < 1 ? 1 : current));
+        },
       });
       const {
         summary,
@@ -411,7 +496,15 @@ function App() {
         ].slice(0, MAX_HISTORY_ITEMS));
       setCopyStatus('');
       setExportError('');
+      setUploadStep(3);
+      setUploadProgress(100);
+      progressTimerRef.current = window.setTimeout(() => {
+        setUploadStep(-1);
+        setUploadProgress(0);
+      }, 1400);
     } catch (error) {
+      setUploadStep(-1);
+      setUploadProgress(0);
       setUploadError(getErrorMessage(error, 'Unable to analyze this PDF.'));
     } finally {
       setUploading(false);
@@ -548,8 +641,14 @@ function App() {
   };
 
   return (
+    <LazyMotion features={domAnimation}>
     <div className="app-shell">
-      <header className="app-header">
+      <m.header
+        className="app-header"
+        initial={{ opacity: 0, y: -16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: 'easeOut' }}
+      >
         <a className="brand" href="#top" aria-label="කොළකෑලි AI home">
           <span className="sinhala-brand">
             <span className="sinhala-brand-text">කොළකෑලි</span>
@@ -568,16 +667,27 @@ function App() {
           <span className="ai-brand">AI</span>
         </a>
         <span className="header-note">Smarter Research Starts Here</span>
-      </header>
+      </m.header>
 
       <main className="page-content" id="top">
-        <section className="hero">
+        <m.section
+          className="hero"
+          initial={{ opacity: 0, y: -16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.55, ease: 'easeOut', delay: 0.08 }}
+        >
           <div className="eyebrow"><span /> YOUR RESEARCH, UNDERSTOOD</div>
           <h1>Make Every Paper<br /><span>Easier To Understand.</span></h1>
           <p>Get a structured summary, then ask questions grounded in the paper.</p>
-        </section>
+        </m.section>
 
-        <section className="panel upload-panel" aria-labelledby="upload-title">
+        <m.section
+          className="panel upload-panel"
+          aria-labelledby="upload-title"
+          initial={{ opacity: 0, scale: 0.97 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5, ease: 'easeOut', delay: 0.14 }}
+        >
           <div className="section-heading">
             <div className="section-icon upload-icon"><Upload size={19} /></div>
             <div>
@@ -642,21 +752,72 @@ function App() {
             </div>
           </form>
 
+          {uploadStep >= 0 && (
+            <div className="upload-progress" role="status" aria-live="polite">
+              <div
+                className="progress-track"
+                role="progressbar"
+                aria-label={`PDF analysis progress: ${['Uploading PDF', 'Extracting Text', 'AI Analyzing', 'Analysis complete'][uploadStep]}`}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={uploadProgress}
+                aria-valuetext={`${uploadProgress}% — ${['Uploading PDF', 'Extracting Text', 'AI Analyzing', 'Analysis complete'][uploadStep]}`}
+              >
+                <span className="progress-fill" style={{ width: `${uploadProgress}%` }} />
+              </div>
+              <ol className="progress-steps">
+                {['Uploading PDF', 'Extracting Text', 'AI Analyzing'].map((step, index) => (
+                  <li
+                    className={index < uploadStep ? 'is-complete' : index === uploadStep ? 'is-current' : ''}
+                    key={step}
+                  >
+                    <span className="progress-step-marker">
+                      {index < uploadStep ? <Check size={11} /> : index + 1}
+                    </span>
+                    <span>{step}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+
           {uploadError && (
             <div className="error-banner" role="alert">
               <AlertCircle size={18} />
               <span>{uploadError}</span>
             </div>
           )}
-        </section>
+        </m.section>
 
-        <div className="research-workspace">
-          <aside className="paper-sidebar" aria-label="Paper history and research gaps">
+        <m.div
+          className="research-workspace"
+          variants={workspaceVariants}
+          initial="hidden"
+          animate="visible"
+        >
+          <m.aside
+            className="paper-sidebar"
+            aria-label="Paper history and research gaps"
+            variants={workspaceCardVariants}
+          >
             <section className="paper-history panel" aria-labelledby="paper-history-title">
               <div className="history-heading">
                 <div className="history-title">
                   <History size={17} aria-hidden="true" />
                   <h2 id="paper-history-title">Paper history</h2>
+                  <span className="tooltip-wrap">
+                    <button
+                      className="tooltip-trigger"
+                      type="button"
+                      aria-label="About Paper History"
+                      aria-describedby="paper-history-tooltip"
+                    >
+                      <CircleHelp size={14} aria-hidden="true" />
+                    </button>
+                    <span className="tooltip-content" role="tooltip" id="paper-history-tooltip">
+                      Your five most recent summaries are saved in this browser so you can reopen them later.
+                    </span>
+                  </span>
                 </div>
                 <span className="history-count">{papers.length}/{MAX_HISTORY_ITEMS}</span>
               </div>
@@ -687,14 +848,33 @@ function App() {
               )}
             </section>
 
-            <section className="unverified-card panel" aria-labelledby="unverified-title">
+            <section
+              className="unverified-card panel"
+              aria-labelledby="unverified-title"
+              aria-busy={uploading}
+            >
               <div className="unverified-heading">
                 <span className="unverified-icon" aria-hidden="true">
                   <Lightbulb size={17} />
                 </span>
                 <h2 id="unverified-title">Unverified Claims &amp; Gaps</h2>
+                <span className="tooltip-wrap">
+                  <button
+                    className="tooltip-trigger"
+                    type="button"
+                    aria-label="About Unverified Claims and Gaps"
+                    aria-describedby="unverified-tooltip"
+                  >
+                    <CircleHelp size={14} aria-hidden="true" />
+                  </button>
+                  <span className="tooltip-content" role="tooltip" id="unverified-tooltip">
+                    Highlights tentative claims and open research gaps explicitly mentioned in the paper.
+                  </span>
+                </span>
               </div>
-              {!analysis ? (
+              {uploading ? (
+                <LoadingSkeleton variant="claims" />
+              ) : !analysis ? (
                 <p className="unverified-placeholder">
                   Upload a paper to reveal research gaps.
                 </p>
@@ -710,10 +890,18 @@ function App() {
                 </ul>
               )}
             </section>
-          </aside>
+          </m.aside>
 
-          <div className="workspace-grid">
-          <section className="panel summary-panel" aria-labelledby="summary-title">
+          <m.div
+            className="workspace-grid"
+            variants={workspaceGroupVariants}
+          >
+          <m.section
+            className="panel summary-panel"
+            aria-labelledby="summary-title"
+            aria-busy={uploading}
+            variants={workspaceCardVariants}
+          >
             <div className="section-heading">
               <div className="section-icon summary-icon"><FileText size={19} /></div>
               <div>
@@ -763,7 +951,9 @@ function App() {
               <div className="copy-status" role="status" aria-live="polite">{copyStatus}</div>
             )}
 
-            {analysis ? (
+            {uploading ? (
+              <LoadingSkeleton variant="summary" />
+            ) : analysis ? (
               <>
                 <div className="markdown-body">
                   <ReactMarkdown>{analysis}</ReactMarkdown>
@@ -821,9 +1011,13 @@ function App() {
                 <p>Upload a paper and generate a summary of its key ideas and findings.</p>
               </div>
             )}
-          </section>
+          </m.section>
 
-          <section className="panel chat-panel" aria-labelledby="chat-title">
+          <m.section
+            className="panel chat-panel"
+            aria-labelledby="chat-title"
+            variants={workspaceCardVariants}
+          >
             <div className="section-heading">
               <div className="section-icon chat-icon"><MessageCircle size={19} /></div>
               <div>
@@ -883,12 +1077,13 @@ function App() {
 
             {analysis && (
               <div className="suggested-questions" aria-label="Suggested questions">
+                <p className="quick-prompt-label">Try asking</p>
                 {SUGGESTED_QUESTIONS.map((suggestedQuestion) => (
                   <button
-                    className="question-chip"
+                    className="question-chip quick-prompt-chip"
                     key={suggestedQuestion}
                     type="button"
-                    onClick={() => void handleAskQuestion(suggestedQuestion)}
+                    onClick={() => setQuestion(suggestedQuestion)}
                     disabled={!documentContext || sending}
                   >
                     {suggestedQuestion}
@@ -942,11 +1137,18 @@ function App() {
                 </button>
               )}
             </div>
-          </section>
-          </div>
-        </div>
+          </m.section>
+          </m.div>
+        </m.div>
 
-        <section className="feature-overview" aria-labelledby="features-title">
+        <m.section
+          className="feature-overview"
+          aria-labelledby="features-title"
+          initial={{ opacity: 0, y: 40 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.55, ease: 'easeOut' }}
+        >
           <h2 id="features-title">
             <span className="feature-script feature-script-muted">Explore Our</span>{' '}
             <span className="feature-script">Features</span>
@@ -957,21 +1159,21 @@ function App() {
               <p>The main tools for understanding a research paper.</p>
             </div>
             <div className="feature-grid core-feature-grid">
-              <article className="feature-card">
+              <m.article className="feature-card" {...featureCardMotionProps}>
                 <span className="feature-icon" aria-hidden="true">⚡</span>
                 <h4>PDF Analysis</h4>
                 <p>Upload one academic PDF and extract its research content for analysis.</p>
-              </article>
-              <article className="feature-card">
+              </m.article>
+              <m.article className="feature-card" {...featureCardMotionProps}>
                 <span className="feature-icon" aria-hidden="true">📊</span>
                 <h4>Structured Summary</h4>
                 <p>Get a readable five-part summary: title and authors, problem, methodology, results, and conclusion.</p>
-              </article>
-              <article className="feature-card">
+              </m.article>
+              <m.article className="feature-card" {...featureCardMotionProps}>
                 <span className="feature-icon" aria-hidden="true">💬</span>
                 <h4>Paper-Grounded Chat</h4>
                 <p>Ask natural-language questions and get answers grounded in the uploaded paper.</p>
-              </article>
+              </m.article>
             </div>
           </section>
 
@@ -981,29 +1183,29 @@ function App() {
               <p>Helpful tools for revisiting, sharing, and using your results.</p>
             </div>
             <div className="feature-grid extra-feature-grid">
-              <article className="feature-card">
+              <m.article className="feature-card" {...featureCardMotionProps}>
                 <span className="feature-icon" aria-hidden="true">🕘</span>
                 <h4>Paper History</h4>
                 <p>Keep up to five recent summaries on this browser and switch back to them later.</p>
-              </article>
-              <article className="feature-card">
+              </m.article>
+              <m.article className="feature-card" {...featureCardMotionProps}>
                 <span className="feature-icon" aria-hidden="true">📑</span>
                 <h4>Citations &amp; Export</h4>
                 <p>Copy APA/IEEE citations or export summaries as Markdown, HTML, or print-ready PDF.</p>
-              </article>
-              <article className="feature-card">
+              </m.article>
+              <m.article className="feature-card" {...featureCardMotionProps}>
                 <span className="feature-icon" aria-hidden="true">✨</span>
                 <h4>Chat Shortcuts</h4>
                 <p>Start with suggested questions or clear the conversation when you want a fresh start.</p>
-              </article>
-              <article className="feature-card">
+              </m.article>
+              <m.article className="feature-card" {...featureCardMotionProps}>
                 <span className="feature-icon" aria-hidden="true">🔎</span>
                 <h4>Research Gaps &amp; Claims</h4>
                 <p>See tentative claims and open research questions identified in the paper.</p>
-              </article>
+              </m.article>
             </div>
           </section>
-        </section>
+        </m.section>
 
         <footer className="page-footer">
           <span>කොළකෑලි AI</span>
@@ -1012,6 +1214,7 @@ function App() {
         </footer>
       </main>
     </div>
+    </LazyMotion>
   );
 }
 
