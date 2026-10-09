@@ -6,16 +6,19 @@ from dotenv import load_dotenv
 from google import genai
 import pypdf
 
+# Load environment variables
 load_dotenv()
 api_key = os.getenv("GOOGLE_API_KEY")
 
 if not api_key:
     raise ValueError("GOOGLE_API_KEY is missing from .env file.")
 
+# Initialize Google GenAI client
 client = genai.Client(api_key=api_key)
 
-app = FastAPI()
+app = FastAPI(title="Research Assistant API")
 
+# Enable CORS for frontend integration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -31,9 +34,11 @@ async def root():
 @app.post("/analyze-pdf")
 async def analyze_pdf(file: UploadFile = File(...)):
     try:
+        # Validate file format
         if not file.filename.lower().endswith(".pdf"):
-            raise HTTPException(status_code=400, detail="Please upload a PDF file.")
+            raise HTTPException(status_code=400, detail="Please upload a valid PDF file.")
 
+        # Extract text from uploaded PDF
         file_bytes = await file.read()
         pdf_reader = pypdf.PdfReader(BytesIO(file_bytes))
         
@@ -46,23 +51,28 @@ async def analyze_pdf(file: UploadFile = File(...)):
         if not text.strip():
             raise HTTPException(status_code=400, detail="No readable text found in the PDF file.")
 
+        # Prompt structured strictly to extract the exact 5 sections required by the specification
         prompt = f"""
-        You are an expert research assistant.
-        Analyze the following research document and provide:
-        1. Summary
-        2. Key Insights & Takeaways
-        3. Main Topics Covered
+        You are an expert AI research assistant.
+        Analyze the following research paper thoroughly and generate a structured summary using strictly the following 5 sections:
+
+        1. Title & Authors and Abstract
+        2. Problem Statement
+        3. Methodology
+        4. Key Results
+        5. Conclusion
+
+        Ensure each section is clearly highlighted using Markdown headers and bullet points where necessary.
 
         Document Content:
-        {text[:10000]}
+        {text[:12000]}
         """
 
-                # Google API එකෙන් ඉල්ලන exact model එක
+        # Call Gemini model API
         response = client.models.generate_content(
-            model="gemini-1.5-flash",
+            model="gemini-3.8-flash",
             contents=prompt
         )
-
 
         if not response.text:
             raise Exception("Gemini returned an empty response.")
