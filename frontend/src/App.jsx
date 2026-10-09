@@ -63,6 +63,28 @@ const featureCardMotionProps = {
   viewport: { once: true },
   transition: { duration: 0.5, ease: 'easeOut' },
 };
+const TITLE_GLOW_STEP_MS = 100;
+
+function SequentialGlowText({ text, className = '' }) {
+  return (
+    <span className={`sequential-glow-text ${className}`.trim()} aria-label={text}>
+      {Array.from(text, (character, index) => (
+        character === ' '
+          ? ' '
+          : (
+            <span
+              className="title-glow-letter"
+              aria-hidden="true"
+              key={index}
+              style={{ animationDelay: `${index * TITLE_GLOW_STEP_MS}ms` }}
+            >
+              {character}
+            </span>
+          )
+      ))}
+    </span>
+  );
+}
 
 function LoadingSkeleton({ variant }) {
   return (
@@ -650,7 +672,7 @@ function App() {
         transition={{ duration: 0.5, ease: 'easeOut' }}
       >
         <a className="brand" href="#top" aria-label="කොළකෑලි AI home">
-          <span className="sinhala-brand">
+          <span className="sinhala-brand brand-wave-start">
             <span className="sinhala-brand-text">කොළකෑලි</span>
             <svg
               className="sinhala-brand-underline"
@@ -664,9 +686,11 @@ function App() {
               />
             </svg>
           </span>
-          <span className="ai-brand">AI</span>
+          <span className="ai-brand brand-wave-start">AI</span>
         </a>
-        <span className="header-note">Smarter Research Starts Here</span>
+        <span className="header-note">
+          <SequentialGlowText text="Smarter Research Starts Here" />
+        </span>
       </m.header>
 
       <main className="page-content" id="top">
@@ -676,13 +700,22 @@ function App() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.55, ease: 'easeOut', delay: 0.08 }}
         >
-          <div className="eyebrow"><span /> YOUR RESEARCH, UNDERSTOOD</div>
-          <h1>Make Every Paper<br /><span>Easier To Understand.</span></h1>
-          <p>Get a structured summary, then ask questions grounded in the paper.</p>
+          <div className="eyebrow">
+            <span />
+            <SequentialGlowText text="YOUR RESEARCH, UNDERSTOOD" />
+          </div>
+          <h1>
+            <SequentialGlowText text="Make Every Paper" className="lime-depth-title" />
+            <br />
+            <SequentialGlowText text="Easier To Understand." className="subtitle-glow-title" />
+          </h1>
+          <p>
+            <SequentialGlowText text="Get a structured summary, then ask questions grounded in the paper." />
+          </p>
         </m.section>
 
         <m.section
-          className="panel upload-panel"
+          className="panel upload-panel border-beam-card"
           aria-labelledby="upload-title"
           initial={{ opacity: 0, scale: 0.97 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -691,7 +724,7 @@ function App() {
           <div className="section-heading">
             <div className="section-icon upload-icon"><Upload size={19} /></div>
             <div>
-              <h2 id="upload-title">Upload a research paper</h2>
+              <h2 className="bright-card-title" id="upload-title">Upload a research paper</h2>
             </div>
           </div>
 
@@ -800,11 +833,11 @@ function App() {
             aria-label="Paper history and research gaps"
             variants={workspaceCardVariants}
           >
-            <section className="paper-history panel" aria-labelledby="paper-history-title">
+            <section className="paper-history panel border-beam-card" aria-labelledby="paper-history-title">
               <div className="history-heading">
                 <div className="history-title">
                   <History size={17} aria-hidden="true" />
-                  <h2 id="paper-history-title">Paper history</h2>
+                  <h2 className="bright-card-title" id="paper-history-title">Paper history</h2>
                   <span className="tooltip-wrap">
                     <button
                       className="tooltip-trigger"
@@ -849,7 +882,7 @@ function App() {
             </section>
 
             <section
-              className="unverified-card panel"
+              className="unverified-card panel border-beam-card"
               aria-labelledby="unverified-title"
               aria-busy={uploading}
             >
@@ -857,7 +890,7 @@ function App() {
                 <span className="unverified-icon" aria-hidden="true">
                   <Lightbulb size={17} />
                 </span>
-                <h2 id="unverified-title">Unverified Claims &amp; Gaps</h2>
+                <h2 className="bright-card-title" id="unverified-title">Unverified Claims &amp; Gaps</h2>
                 <span className="tooltip-wrap">
                   <button
                     className="tooltip-trigger"
@@ -897,7 +930,7 @@ function App() {
             variants={workspaceGroupVariants}
           >
           <m.section
-            className="panel summary-panel"
+            className="panel summary-panel border-beam-card"
             aria-labelledby="summary-title"
             aria-busy={uploading}
             variants={workspaceCardVariants}
@@ -905,7 +938,7 @@ function App() {
             <div className="section-heading">
               <div className="section-icon summary-icon"><FileText size={19} /></div>
               <div>
-                <h2 id="summary-title">Structured summary</h2>
+                <h2 className="bright-card-title" id="summary-title">Structured summary</h2>
               </div>
               {analysis && (
                 <span className="ready-badge"><Check size={13} /> Ready</span>
@@ -1016,14 +1049,14 @@ function App() {
           </m.section>
 
           <m.section
-            className="panel chat-panel"
+            className="panel chat-panel border-beam-card"
             aria-labelledby="chat-title"
             variants={workspaceCardVariants}
           >
             <div className="section-heading">
               <div className="section-icon chat-icon"><MessageCircle size={19} /></div>
               <div>
-                <h2 id="chat-title">Ask the paper</h2>
+                <h2 className="bright-card-title" id="chat-title">Ask the paper</h2>
               </div>
             </div>
 
