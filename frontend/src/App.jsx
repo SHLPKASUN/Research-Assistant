@@ -142,8 +142,19 @@ function loadPaperHistory() {
 }
 
 function getErrorMessage(error, fallback) {
+  const status = error.response?.status;
   const detail = error.response?.data?.detail;
-  if (typeof detail === 'string') return detail;
+
+  if (status === 429) {
+    return 'The Gemini service is currently rate-limited or quota-exhausted. Please check your Google AI Studio billing and quota, then try again in a few minutes.';
+  }
+
+  if (status === 401 || status === 403) {
+    return 'The Gemini API key appears to be invalid or missing the required permissions. Please update the backend GOOGLE_API_KEY and restart the server.';
+  }
+
+  if (typeof detail === 'string' && detail.trim()) return detail;
+
   if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
     return 'The request timed out. Please try again.';
   }

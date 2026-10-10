@@ -21,6 +21,34 @@ MAX_CHAT_MESSAGES = 20
 GEMINI_REQUEST_TIMEOUT_SECONDS = 60
 MODEL_NAME = "gemini-3.8-flash"
 
+
+def get_gemini_user_message(exc: APIError) -> str:
+    status = getattr(exc, "status", "") or ""
+    code = getattr(exc, "code", None)
+    message = getattr(exc, "message", "") or ""
+    status_text = f"{status} {code}".strip()
+    normalized = f"{status_text} {message}".strip()
+    normalized_lower = normalized.lower()
+
+    if code == 429 or "resource_exhausted" in normalized_lower or "quota" in normalized_lower:
+        return (
+            "The Gemini API is temporarily unavailable because the current quota or rate limit was exhausted. "
+            "Please check your Google AI Studio billing and quota, then try again in a few minutes."
+        )
+    if code in (401, 403) or "forbidden" in normalized_lower or "api key" in normalized_lower:
+        return (
+            "The Gemini API key is invalid, expired, or missing permissions. Please update the backend GOOGLE_API_KEY "
+            "and restart the server."
+        )
+    if "timeout" in normalized_lower:
+        return "The Gemini API request timed out. Please try again with a smaller or simpler request."
+    if "empty response" in normalized_lower:
+        return "Gemini returned no usable content. Please try again."
+    return (
+        "The Gemini API is currently unavailable. Please try again in a moment or check your Google AI Studio usage and billing."
+    )
+
+
 load_dotenv()
 api_key = os.getenv("GOOGLE_API_KEY")
 
@@ -77,16 +105,17 @@ async def generate_content(
         ) from exc
     except APIError as exc:
         logger.exception("Gemini API request failed")
-        status_code = exc.code if 400 <= exc.code < 600 else 502
+        code = getattr(exc, "code", None)
+        status_code = code if isinstance(code, int) and 400 <= code < 600 else 502
         raise HTTPException(
             status_code=status_code,
-            detail=f"Gemini API error ({exc.code} {exc.status}): {exc.message}",
+            detail=get_gemini_user_message(exc),
         ) from exc
     except Exception as exc:
         logger.exception("Unexpected error while generating Gemini content")
         raise HTTPException(
             status_code=502,
-            detail="Could not generate a response from the Gemini API.",
+            detail="The Gemini API is currently unavailable. Please try again in a moment.",
         ) from exc
 
     if not response.text or not response.text.strip():

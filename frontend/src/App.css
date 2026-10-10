@@ -488,8 +488,9 @@ textarea:focus-visible,
   min-width: 0;
   flex: 1;
   padding: 17px 14px;
-  border-color: var(--line);
+  border-color: rgba(140, 92, 255, 0.55);
   background: var(--paper);
+  box-shadow: 0 0 0 1px rgba(140, 92, 255, 0.2), 0 0 18px rgba(140, 92, 255, 0.22);
 }
 
 .unverified-heading {
@@ -2082,8 +2083,8 @@ body::-webkit-scrollbar-thumb,
 }
 
 .unverified-card {
-  --beam-color: #ef4444;
-  --beam-glow: rgba(239, 68, 68, 0.35);
+  --beam-color: #8c5cff;
+  --beam-glow: rgba(140, 92, 255, 0.38);
 }
 
 .border-beam-card::before {
